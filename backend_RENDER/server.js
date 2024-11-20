@@ -10,20 +10,22 @@ const port = 3000; // Usando uma porta única para o servidor
 app.use(express.json());
 app.use(cors());
 
-// Configuração do banco de dados
-const connection = mysql.createConnection({
+// Configuração do pool de conexões
+const pool = mysql.createPool({
+  connectionLimit: 10, // Número máximo de conexões simultâneas
   host: 'mysql.infocimol.com.br',
   user: 'infocimol28',
   password: 'angelo1',
   database: 'infocimol28',
 });
 
-connection.connect((err) => {
+pool.getConnection((err, connection) => {
   if (err) {
     console.error('Erro ao conectar ao banco de dados:', err);
     return;
   }
   console.log('Conectado ao banco de dados.');
+  connection.release(); // Liberar a conexão após o teste
 });
 
 // Rota de teste para verificar se o servidor está funcionando
@@ -38,7 +40,7 @@ app.post('/locations', async (req, res) => {
   try {
     console.log(`Recebido dados GPS: Latitude = ${latitude}, Longitude = ${longitude}`);
     
-    connection.query(
+    pool.query(
       'INSERT INTO location (latitude, longitude) VALUES (?, ?)',
       [latitude, longitude],
       (error, results) => {
@@ -66,7 +68,7 @@ app.post('/api/register', (req, res) => {
       return res.status(500).json({ error: 'Erro ao criptografar a senha.' });
     }
 
-    connection.query(
+    pool.query(
       'INSERT INTO usuario (nome, email, senha, endereco, data_nascimento) VALUES (?, ?, ?, ?, ?)',
       [nome, email, hashedPassword, endereco, data_nascimento],
       (error, results) => {
@@ -85,7 +87,7 @@ app.post('/api/login', (req, res) => {
   const { email, senha } = req.body;
   console.log('Recebido no login:', { email, senha });
 
-  connection.query('SELECT * FROM usuario WHERE email = ?', [email], (error, results) => {
+  pool.query('SELECT * FROM usuario WHERE email = ?', [email], (error, results) => {
     if (error) {
       console.error('Erro ao buscar o usuário:', error);
       return res.status(500).json({ error: 'Erro ao buscar o usuário.' });
@@ -96,12 +98,12 @@ app.post('/api/login', (req, res) => {
     }
     const user = results[0];
 
-    console.log('Senha armazenada no banco de dados:', user.senha); // Verifique o valor da senha armazenada no banco
+    console.log('Senha armazenada no banco de dados:', user.senha);
 
     bcrypt.compare(senha, user.senha, (err, isMatch) => {
       if (err) {
-        console.error('Erro ao comparar a senha:', err);  // Exiba o erro
-        return res.status(500).json({ error: 'Erro ao comparar a senha.', details: err });
+        console.error('Erro ao comparar a senha:', err);
+        return res.status(500).json({ error: 'Erro ao comparar a senha.' });
       }
       console.log('Senha corresponde:', isMatch);
 
